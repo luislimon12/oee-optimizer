@@ -41,23 +41,27 @@ class Stage:
       self.downtime=0
 
     def run(self):
-       
-       while self.env.now<SHIFT_MINUTES:
+        while self.env.now<SHIFT_MINUTES:
+         
          
          
          #simulate the time to prduce unit
-         yield self.env.timeout(IDEAL_CYCLE)
-         self.units_produced+=1
-         if random.random()<0.02:
+            yield self.env.timeout(IDEAL_CYCLE)
+            self.units_produced+=1
+            if random.random()<0.02:
            
                    
-            self.env.process(self.jam())
-         if random.random()<0.05:
+                self.env.process(self.jam())
+            if random.random()<0.05:
 
-            self.units_rejected+=1
-         if random.random()<0.02:
+                self.units_rejected+=1
+            if random.random()<0.02:
 
-            self.env.process(self.minor_stop())
+                self.env.process(self.minor_stop())
+
+            if random.random()<0.03:
+
+                self.env.process(self.speed_loss())
 
         
           
@@ -82,6 +86,15 @@ class Stage:
               self.downtime+=minor_stop
               
               self.num_stops+=1
+
+    def speed_loss(self):
+            
+                speed_loss=random.uniform(3.0,5.0) #0.1-1 minutes
+                yield self.env.timeout(speed_loss)
+                self.downtime+=speed_loss
+                
+
+           
 
           
 
