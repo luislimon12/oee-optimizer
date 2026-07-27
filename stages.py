@@ -48,8 +48,30 @@ class Stage:
          #simulate the time to prduce unit
          yield self.env.timeout(IDEAL_CYCLE)
          self.units_produced+=1
+         if random.random()<0.02:
+           
+                   
+            self.env.process(self.jam())
          if random.random()<0.05:
+
             self.units_rejected+=1
+
+        
+          
+    def jam(self):
+       with self.repairmen.request() as request:
+          #wait till resource is available
+          yield request
+          #create a random repair time
+          repair_time=random.randint(2,60) #2-60 minutes
+          yield self.env.timeout(repair_time)
+          self.downtime+=repair_time
+          self.num_stops+=1
+          self.num_repairs+=1
+
+          
+
+        
 
 
 if __name__ == "__main__":
@@ -77,6 +99,10 @@ if __name__ == "__main__":
     ## Print how many units the Filling stage produced this shift
     
     print(f"{stage.name} - Units Rejected: {stage.units_rejected}")
+    print(f"{stage.name} - Units Produced: {stage.units_produced}")
+
+    print(f"{stage.name} - Jams: {stage.num_stops}")
+    print(f"{stage.name} - Downtime (min): {stage.downtime}")
     ## Print how many units were rejected
         
 
