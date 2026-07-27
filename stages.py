@@ -55,6 +55,9 @@ class Stage:
          if random.random()<0.05:
 
             self.units_rejected+=1
+         if random.random()<0.02:
+
+            self.env.process(self.minor_stop())
 
         
           
@@ -68,6 +71,17 @@ class Stage:
           self.downtime+=repair_time
           self.num_stops+=1
           self.num_repairs+=1
+
+    def minor_stop(self):
+           with self.operators.request() as request:
+              #wait till resource is available
+              yield request
+              #create a random repair time
+              minor_stop=random.uniform(0.1,2) #2-60 minutes
+              yield self.env.timeout(minor_stop)
+              self.downtime+=minor_stop
+              
+              self.num_stops+=1
 
           
 
