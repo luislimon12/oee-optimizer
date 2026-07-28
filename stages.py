@@ -39,6 +39,9 @@ class Stage:
       self.num_stops=0
       self.uptime=0
       self.downtime=0
+      self.planned_downtime=0
+      self.num_planned_stops = 0
+      self.num_jams = 0
 
     def run(self):
         while self.env.now<SHIFT_MINUTES:
@@ -48,7 +51,7 @@ class Stage:
          #simulate the time to prduce unit
             yield self.env.timeout(IDEAL_CYCLE)
             self.units_produced+=1
-            if random.random()<0.02:
+            if random.random()<0.01:
            
                    
                 self.env.process(self.jam())
@@ -63,6 +66,14 @@ class Stage:
 
                 self.env.process(self.speed_loss())
 
+            if random.random()<0.002:
+                
+                self.env.process(self.cip())
+            if random.random()<0.002:
+                            
+                            
+                self.env.process(self.changeover())
+
         
           
     def jam(self):
@@ -73,8 +84,9 @@ class Stage:
           repair_time=random.randint(2,60) #2-60 minutes
           yield self.env.timeout(repair_time)
           self.downtime+=repair_time
-          self.num_stops+=1
+        
           self.num_repairs+=1
+          self.num_jams+=1
 
     def minor_stop(self):
            with self.operators.request() as request:
@@ -92,6 +104,36 @@ class Stage:
                 speed_loss=random.uniform(3.0,5.0) #0.1-1 minutes
                 yield self.env.timeout(speed_loss)
                 self.downtime+=speed_loss
+
+    #target triggers ÷ total cycles = probability per cycle
+     #1.5 jams ÷ 240 cycles = 0.00625
+
+    def changeover(self):
+        with self.operators.request() as request:
+
+            yield request
+            with self.repairmen.request() as request2:
+                yield request2
+                changeover_time=random.uniform(10,45) #10-30 minutes
+                yield self.env.timeout(changeover_time)
+                self.planned_downtime+=changeover_time
+                self.num_planned_stops += 1
+                yield from self.speed_loss()
+                for _ in range(random.randint(0,10)): #if you use self.unit produces you will restart the counter use _
+                            if random.random() < 0.30: 
+                                self.units_rejected += 1
+    
+
+    def cip(self):
+
+        clean_time = 45
+        yield self.env.timeout(clean_time)
+        self.planned_downtime += clean_time
+        self.num_planned_stops += 1
+        for _ in range(random.randint(0,10)): #if you use self.unit produces you will restart the counter use _
+            if random.random() < 0.30: 
+                self.units_rejected += 1
+
                 
 
            
@@ -126,10 +168,14 @@ if __name__ == "__main__":
     ## Print how many units the Filling stage produced this shift
     
     print(f"{stage.name} - Units Rejected: {stage.units_rejected}")
-    print(f"{stage.name} - Units Produced: {stage.units_produced}")
+    print(f"{stage.name} - Jams: {stage.num_jams}")
+    print(f"{stage.name} - Minor Stops: {stage.num_stops}")
+
 
     print(f"{stage.name} - Jams: {stage.num_stops}")
     print(f"{stage.name} - Downtime (min): {stage.downtime}")
+    print(f"{stage.name} - Planned Downtime (min): {stage.planned_downtime}")
+    print(f"{stage.name} - Planned stops: {stage.num_planned_stops}")
     ## Print how many units were rejected
         
 
