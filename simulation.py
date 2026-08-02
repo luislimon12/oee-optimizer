@@ -1,6 +1,7 @@
 import simpy  # Imports the SimPy library for discrete-event simulation.
 import random  # Imports Python's random module for generating random values.
-from stages import Stage, NUM_REPAIRMEN, NUM_OPERATORS, SHIFT_MINUTES  # Imports the Stage class and simulation constants.
+from stages import Stage, NUM_REPAIRMEN, NUM_OPERATORS, SHIFT_MINUTES 
+import pandas as pd # Imports the Stage class and simulation constants.
 
 def run_simulation():  # Defines the main function that runs the simulation.
     env = simpy.Environment()  # Creates the simulation environment that tracks simulated time.
@@ -13,14 +14,30 @@ def run_simulation():  # Defines the main function that runs the simulation.
     env.process(stage2.run())  # Registers the Sealing stage process with the environment.
     env.process(stage3.run())  # Registers the Packaging stage process with the environment.
     env.run(until=SHIFT_MINUTES )  # Runs the simulation until the chosen end time.
-    for stage in [stage1, stage2, stage3]:  # Loops through each stage to print its results.
-        print(f"{stage.name} - Units Produced: {stage.units_produced}")  # Prints units produced for the stage.
-        print(f"{stage.name} - Units Rejected: {stage.units_rejected}")  # Prints units rejected for the stage.
-        print(f"{stage.name} - Jams: {stage.num_jams}")  # Prints the number of jams for the stage.
-        print(f"{stage.name} - Minor Stops: {stage.num_stops}")  # Prints the number of minor stops for the stage.
-        print(f"{stage.name} - Downtime (min): {stage.downtime}")  # Prints total downtime in minutes.
-        print(f"{stage.name} - Planned Downtime (min): {stage.planned_downtime}")  # Prints planned downtime in minutes.
-        print(f"{stage.name} - Planned stops: {stage.num_planned_stops}")  # Prints planned stops for the stage.
+    
+    return [stage1, stage2, stage3]  # Prints planned stops for the stage.
 
 if __name__ == "__main__":
-    run_simulation()
+
+    results = []
+    for i in range(100):  ## loop 100 shifts
+        stages = run_simulation()  ## run one shift, get 3 stages back
+        for stage in stages:  ## loop through each stage
+            results.append({
+                "shift": i + 1,          ## shift number 1-100
+                "stage": stage.name,     ## Filling, Sealing, or Packaging
+                "units_produced": stage.units_produced,
+                "units_rejected": stage.units_rejected,
+                "jams": stage.num_jams,
+                "num_stops": stage.num_stops,
+                "planned_downtime": stage.planned_downtime,
+                "planned_num_stops": stage.num_planned_stops,
+                "downtime": stage.downtime
+            })
+
+    print(f"Total records collected: {len(results)}")
+    print(results[0])  ## print first record to verify
+    
+    df = pd.DataFrame(results)
+    print(df.head())
+    print(df.describe())

@@ -110,7 +110,7 @@ class Stage:
 
     def changeover(self):
         with self.operators.request() as request:
-
+ 
             yield request
             with self.repairmen.request() as request2:
                 yield request2
