@@ -3,6 +3,9 @@ from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.model_selection import train_test_split
 from db_connect import get_engine
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+import seaborn as sns
 
 def build_gold():
     engine = get_engine()
@@ -48,18 +51,45 @@ def build_gold():
     importance_df.to_sql("gold_dt_feature_importance", con=engine, if_exists="replace", index=False)
     return dt, X_test, y_test, features
 
+def build_kmeans_gold():
+    engine = get_engine()
+    df2 = pd.read_sql("SELECT shift, stage, availability, performance, quality, oee, downtime FROM silver_shifts", engine)
+    scaler = StandardScaler()
+    features2 = ["availability", "performance", "quality", "oee"]
+    
+
+    
+    X2= df2[features2]
+    X_scaled = scaler.fit_transform(X2)
+    km = KMeans(n_clusters=3, random_state=42)
+    km.fit(X_scaled)
+    df2["cluster"] = km.labels_
+    df2.to_sql("gold_kmeans_predictions", con=engine, if_exists="replace", index=False)
+    
+    sns.scatterplot(data=df2, x="oee", y="downtime", hue="cluster", palette="Set1")
+    plt.title("K-Means Clusters - Shift Performance Patterns")
+    plt.show()
+    return km, X_scaled, df2["cluster"], features2
+
+    
+
+
 if __name__ == "__main__":
     dt, X_test, y_test, features = build_gold()
     print("Gold layer built successfully")
-    ## print model accuracy
     print(f"Accuracy: {dt.score(X_test, y_test):.2f}")
-    ## print feature importance
     print(pd.DataFrame({
         "feature": features,
         "importance": dt.feature_importances_
     }).sort_values("importance", ascending=False))
-    ## visualize the decision tree
+    
+    ## decision tree visual — title and show before kmeans
     plt.figure(figsize=(20, 10))
     plot_tree(dt, feature_names=features, class_names=["Good", "Low OEE"], filled=True)
     plt.title("Decision Tree - OEE Below 65%")
     plt.show()
+    
+    ## run kmeans after decision tree is closed
+    km, X_scaled, clusters, features2 = build_kmeans_gold()
+    print("K-Means built successfully")
+    print(clusters.value_counts())
