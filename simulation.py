@@ -1,23 +1,31 @@
-import simpy  # Imports the SimPy library for discrete-event simulation.
-import random  # Imports Python's random module for generating random values.
-from stages import Stage, NUM_REPAIRMEN, NUM_OPERATORS, SHIFT_MINUTES 
-import pandas as pd # Imports the Stage class and simulation constants.
+import simpy
+import random
+from stages import Stage, NUM_REPAIRMEN, NUM_OPERATORS, SHIFT_MINUTES
+import pandas as pd
 from db_connect import get_connection
-def run_simulation():  # Defines the main function that runs the simulation.
-    env = simpy.Environment()  # Creates the simulation environment that tracks simulated time.
-    repairmen = simpy.Resource(env, capacity=NUM_REPAIRMEN)  # Creates a shared repairmen resource with a fixed capacity.
-    operators = simpy.Resource(env, capacity=NUM_OPERATORS)  # Creates a shared operators resource with a fixed capacity.
-    stage1 = Stage(env, repairmen, operators, "Filling")  # Creates the Filling stage.
-    stage2 = Stage(env, repairmen, operators, "Sealing")  # Creates the Sealing stage.
-    stage3 = Stage(env, repairmen, operators, "Packaging")  # Creates the Packaging stage.
-    env.process(stage1.run())  # Registers the Filling stage process with the environment.
-    env.process(stage2.run())  # Registers the Sealing stage process with the environment.
-    env.process(stage3.run())  # Registers the Packaging stage process with the environment.
-    env.run(until=SHIFT_MINUTES )  # Runs the simulation until the chosen end time.
-    
-    return [stage1, stage2, stage3] 
 
- # Prints planned stops for the stage.
+def run_simulation():
+    env = simpy.Environment()
+    repairmen = simpy.Resource(env, capacity=NUM_REPAIRMEN)
+    operators = simpy.Resource(env, capacity=NUM_OPERATORS)
+    stage1 = Stage(env, repairmen, operators, "Filling")
+    stage2 = Stage(env, repairmen, operators, "Sealing")
+    stage3 = Stage(env, repairmen, operators, "Packaging")
+    env.process(stage1.run())
+    env.process(stage2.run())
+    env.process(stage3.run())
+    env.run(until=SHIFT_MINUTES)
+    return [stage1, stage2, stage3]
+
+def collect_events(stages, shift_nums):
+    ## create a list to hold all events for this shift
+    events = []
+    for stage in stages:
+        for event in stage.events:
+            event["shift"] = shift_nums
+            event["stage"] = stage.name
+            events.append(event)
+    return events
 
 def insert_to_bronze(results):
     conn = get_connection()
@@ -27,22 +35,40 @@ def insert_to_bronze(results):
                 num_stops, planned_downtime, planned_num_stops, downtime)
                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"""
     values = [(r["shift"], r["stage"], r["units_produced"], r["units_rejected"],
-               r["jams"], r["num_stops"], r["planned_downtime"], 
+               r["jams"], r["num_stops"], r["planned_downtime"],
                r["planned_num_stops"], r["downtime"]) for r in results]
     cursor.executemany(query, values)
     conn.commit()
     cursor.close()
     conn.close()
 
-if __name__ == "__main__":
+def insert_events_to_bronze(all_events, chunk_size=500):
+    conn = get_connection()
+    cursor = conn.cursor()
+    columns = ["shift", "stage", "event_type",
+               "start_time", "end_time",
+               "duration", "severity", "resource_used"]
+    query = """INSERT INTO bronze_events 
+               (shift, stage, event_type, start_time, end_time, duration, severity, resource_used)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"""
+    for i in range(0, len(all_events), chunk_size):
+        chunk = all_events[i:i + chunk_size]
+        values = [tuple(e[col] for col in columns) for e in chunk]
+        cursor.executemany(query, values)
+        conn.commit()
+    cursor.close()
+    conn.close()
 
+if __name__ == "__main__":
     results = []
-    for i in range(100):  ## loop 100 shifts
-        stages = run_simulation()  ## run one shift, get 3 stages back
-        for stage in stages:  ## loop through each stage
+    all_events = []
+    for i in range(100):
+        stages = run_simulation()
+        all_events += collect_events(stages, i + 1)
+        for stage in stages:
             results.append({
-                "shift": i + 1,          ## shift number 1-100
-                "stage": stage.name,     ## Filling, Sealing, or Packaging
+                "shift": i + 1,
+                "stage": stage.name,
                 "units_produced": stage.units_produced,
                 "units_rejected": stage.units_rejected,
                 "jams": stage.num_jams,
@@ -53,10 +79,11 @@ if __name__ == "__main__":
             })
 
     print(f"Total records collected: {len(results)}")
-    print(results[0])  ## print first record to verify
-    
+    print(f"Total events collected: {len(all_events)}")
+    print(results[0])
     df = pd.DataFrame(results)
     print(df.head())
     print(df.describe())
     insert_to_bronze(results)
-    print("Records inserted to MySQL bronze_shifts")
+    insert_events_to_bronze(all_events)
+    print("Records inserted to MySQL bronze_shifts and bronze_events")
