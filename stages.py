@@ -8,7 +8,7 @@ NUM_OPERATORS = 4
 NUM_REPAIRMEN = 2
 
 class Stage:
-    def __init__(self, env, repairmen, operators, name):
+    def __init__(self, env, repairmen, operators, name, jam_prob=0.01, peak_only=False):
         self.env = env
         self.name = name
         self.repairmen = repairmen
@@ -22,13 +22,15 @@ class Stage:
         self.planned_downtime = 0
         self.num_planned_stops = 0
         self.num_jams = 0
-        self.events = []  ## list to store all events with timestamps
+        self.events = []
+        self.jam_prob = jam_prob
+        self.peak_only = peak_only
 
     def run(self):
         while self.env.now < SHIFT_MINUTES:
             yield self.env.timeout(IDEAL_CYCLE)
             self.units_produced += 1
-            if random.random() < 0.01:
+            if random.random() < self.jam_prob:
                 self.env.process(self.jam())
             if random.random() < 0.05:
                 self.units_rejected += 1
@@ -37,9 +39,11 @@ class Stage:
             if random.random() < 0.03:
                 self.env.process(self.speed_loss())
             if random.random() < 0.002:
-                self.env.process(self.cip())
+                if not self.peak_only or self.env.now < 120 or self.env.now > 360:
+                    self.env.process(self.cip())
             if random.random() < 0.002:
-                self.env.process(self.changeover())
+                if not self.peak_only or self.env.now < 120 or self.env.now > 360:
+                    self.env.process(self.changeover())
 
     def jam(self):
         with self.repairmen.request() as request:

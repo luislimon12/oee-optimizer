@@ -4,13 +4,13 @@ from stages import Stage, NUM_REPAIRMEN, NUM_OPERATORS, SHIFT_MINUTES
 import pandas as pd
 from db_connect import get_connection
 
-def run_simulation():
+def run_simulation(jam_prob=0.01, peak_only=False):
     env = simpy.Environment()
     repairmen = simpy.Resource(env, capacity=NUM_REPAIRMEN)
     operators = simpy.Resource(env, capacity=NUM_OPERATORS)
-    stage1 = Stage(env, repairmen, operators, "Filling")
-    stage2 = Stage(env, repairmen, operators, "Sealing")
-    stage3 = Stage(env, repairmen, operators, "Packaging")
+    stage1 = Stage(env, repairmen, operators, "Filling", jam_prob=jam_prob, peak_only=peak_only)
+    stage2 = Stage(env, repairmen, operators, "Sealing", jam_prob=jam_prob, peak_only=peak_only)
+    stage3 = Stage(env, repairmen, operators, "Packaging", jam_prob=jam_prob, peak_only=peak_only)
     env.process(stage1.run())
     env.process(stage2.run())
     env.process(stage3.run())
