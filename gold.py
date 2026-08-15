@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 import seaborn as sns
+from intervaltree import IntervalTree
+
 
 def build_gold():
     engine = get_engine()
@@ -71,6 +73,48 @@ def build_kmeans_gold():
     plt.show()
     return km, X_scaled, df2["cluster"], features2
 
+def build_interval_tree():
+    engine = get_engine()
+    df3 = pd.read_sql("SELECT shift, stage, start_time, end_time, event_type, severity FROM bronze_events", engine)
+
+    ## define peak production hours — minutes 120 to 360 (hours 2-6 of shift)
+    PEAK_START = 120
+    PEAK_END = 360
+    results = []
+
+    for shift in range(1, 101):  ## loop through all 100 shifts
+        for stage in ["Filling", "Sealing", "Packaging"]:  ## loop through each stage
+            
+            ## filter events for this specific shift and stage
+            stage_events = df3[(df3["shift"] == shift) & (df3["stage"] == stage)]
+            
+            ## build IntervalTree — stores actual time interval of each event
+            tree = IntervalTree()
+            for start, end, event in zip(stage_events["start_time"], 
+                                         stage_events["end_time"], 
+                                         stage_events["event_type"]):
+                tree[start:end] = event
+            
+            ## query — which events overlap with peak hours?
+            overlapping = tree[PEAK_START:PEAK_END]
+            
+            ## calculate overlap for each event
+            for interval in overlapping:
+                overlap_start = max(interval.begin, PEAK_START)  ## where overlap begins
+                overlap_end = min(interval.end, PEAK_END)        ## where overlap ends
+                overlap = overlap_end - overlap_start             ## minutes lost during peak
+                
+                results.append({
+                    "shift": shift,
+                    "stage": stage,
+                    "event_type": interval.data,
+                    "peak_overlap": overlap,
+                })
+
+    ## write results to gold table
+    results_df = pd.DataFrame(results)
+    results_df.to_sql("gold_interval_tree", con=engine, if_exists="replace", index=False)
+    print(f"IntervalTree complete — {len(results)} peak hour overlaps found")
     
 
 
@@ -93,3 +137,7 @@ if __name__ == "__main__":
     km, X_scaled, clusters, features2 = build_kmeans_gold()
     print("K-Means built successfully")
     print(clusters.value_counts())
+
+    ## run interval tree
+    build_interval_tree()
+    print("Interval tree built successfully")
